@@ -437,7 +437,50 @@ Below is a verified 5-turn conversational sequence demonstrating persistent stat
 
 ---
 
-## 11. Security Considerations for Production
+## 11. Database Configuration & Alembic Migrations
+
+ContextAI supports dual-database architectures:
+- **Production (Neon PostgreSQL)**: Neon Serverless PostgreSQL with connection pooling (`-pooler`) for low-latency serverless requests and autoscaling.
+- **Local Development / Tests (SQLite)**: Standalone file or in-memory SQLite with isolated `PRAGMA foreign_keys = ON` handling.
+
+### 11.1 Production Enforcement
+If `APP_ENV=production` or `VERCEL` is detected, ContextAI strictly enforces `DATABASE_URL`. The application will fail to start rather than silently falling back to ephemeral SQLite.
+
+### 11.2 Database Drivers
+ContextAI uses **psycopg 3** (`psycopg[binary]`) exclusively. Connection URLs starting with `postgresql://` or `postgres://` are automatically normalized to `postgresql+psycopg://`.
+
+### 11.3 Running Alembic Migrations with `DATABASE_URL_UNPOOLED`
+Per Neon best practices, schema migrations (DDL operations) must use a **direct (unpooled)** connection rather than the connection pooler. The connection pooler operates in transaction mode and does not support statements that require session state or long-running exclusive locks during migrations.
+
+1. **Verify your environment variables**:
+   In `.env.local` (pulled via `neon deploy` or configured manually):
+   ```env
+   # Pooled connection string used for app queries (handles rapid function concurrency)
+   DATABASE_URL="postgresql://user:pass@ep-xyz-pooler.region.neon.tech/neondb?sslmode=require"
+
+   # Direct unpooled connection string used exclusively for Alembic migrations
+   DATABASE_URL_UNPOOLED="postgresql://user:pass@ep-xyz.region.neon.tech/neondb?sslmode=require"
+   ```
+
+2. **Apply migrations**:
+   Alembic automatically detects and prioritizes `DATABASE_URL_UNPOOLED` when running:
+   ```bash
+   alembic upgrade head
+   ```
+
+3. **Check current migration version**:
+   ```bash
+   alembic current
+   ```
+
+4. **Generate a new migration**:
+   ```bash
+   alembic revision --autogenerate -m "describe_changes"
+   ```
+
+---
+
+## 12. Security Considerations for Production
 
 1. **API Key Isolation**: `GEMINI_API_KEY` is loaded server-side only through Pydantic Settings and is never sent to the client or written into logs.
 2. **CORS Hardening**: In production (`APP_ENV=production`), CORS restricts requests strictly to the configured `FRONTEND_ORIGIN`.
@@ -449,7 +492,7 @@ Below is a verified 5-turn conversational sequence demonstrating persistent stat
 
 ---
 
-## 12. License
+## 13. License
 
 ContextAI is developed for the LLM API Integration (AI-1) internship assignment.
 Distributed under the MIT License.

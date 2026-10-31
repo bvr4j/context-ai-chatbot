@@ -47,7 +47,7 @@ def db_engine():
         poolclass=StaticPool,
     )
 
-    @event.listens_for(Engine, "connect")
+    @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
         if hasattr(dbapi_connection, "cursor"):
             cursor = dbapi_connection.cursor()

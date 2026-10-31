@@ -1,14 +1,14 @@
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-
-from sqlalchemy import inspect, text
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
-from app.database import Base, engine
+from app.database import Base, engine, get_db
 from app.gemini import LLMProviderError
 from app.models import Conversation, Message  # noqa: F401 - register ORM metadata
 from app.routes.chat import router as chat_router
@@ -16,48 +16,12 @@ from app.routes.chat import router as chat_router
 settings = get_settings()
 
 
-def init_and_migrate_db() -> None:
-    """Ensure database tables and required schema columns exist across SQLite and Postgres."""
-    Base.metadata.create_all(bind=engine)
-    try:
-        with engine.begin() as conn:
-            inspector = inspect(conn)
-            table_names = inspector.get_table_names()
-
-            if "conversations" in table_names:
-                conv_cols = [c["name"] for c in inspector.get_columns("conversations")]
-                if "title" not in conv_cols:
-                    conn.execute(
-                        text("ALTER TABLE conversations ADD COLUMN title VARCHAR(255) DEFAULT 'New Conversation' NOT NULL")
-                    )
-                if "mode" not in conv_cols:
-                    conn.execute(
-                        text("ALTER TABLE conversations ADD COLUMN mode VARCHAR(20) DEFAULT 'balanced' NOT NULL")
-                    )
-
-            if "messages" in table_names:
-                msg_cols = [c["name"] for c in inspector.get_columns("messages")]
-                if "is_archived" not in msg_cols:
-                    default_bool = "0" if engine.dialect.name == "sqlite" else "FALSE"
-                    conn.execute(
-                        text(f"ALTER TABLE messages ADD COLUMN is_archived BOOLEAN DEFAULT {default_bool} NOT NULL")
-                    )
-                if "mode" not in msg_cols:
-                    conn.execute(
-                        text("ALTER TABLE messages ADD COLUMN mode VARCHAR(20) DEFAULT NULL")
-                    )
-                if "model_label" not in msg_cols:
-                    conn.execute(
-                        text("ALTER TABLE messages ADD COLUMN model_label VARCHAR(100) DEFAULT NULL")
-                    )
-    except Exception:
-        pass
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """Initialize database tables and application resources on startup."""
-    init_and_migrate_db()
+    """Lifespan handler for FastAPI application."""
+    if settings.is_sqlite:
+        # In local SQLite development, initialize tables if not already present
+        Base.metadata.create_all(bind=engine)
     yield
 
 
@@ -112,13 +76,30 @@ def root_info() -> dict[str, str]:
 
 
 @app.get("/health", tags=["system"])
-def health_check(settings: Settings = Depends(get_settings)) -> dict[str, Any]:
+def health_check(
+    response: Response,
+    db: Session = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+) -> dict[str, Any]:
+    db_healthy = True
+    db_dialect = "unknown"
+    try:
+        bind = db.get_bind()
+        db_dialect = bind.dialect.name
+        db.execute(text("SELECT 1"))
+    except Exception:
+        db_healthy = False
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    overall_status = "ok" if db_healthy else "unhealthy"
+
     return {
-        "status": "ok",
+        "status": overall_status,
         "service": "contextai-api",
         "version": "0.1.0",
         "environment": settings.app_env,
-        "database": engine.dialect.name,
+        "database": db_dialect,
+        "database_status": "healthy" if db_healthy else "unhealthy",
         "llm_configured": bool(
             settings.gemini_api_key
             and settings.gemini_api_key.strip()
