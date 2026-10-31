@@ -53,7 +53,13 @@ flowchart TD
   - Message size limits (`MAX_MESSAGE_CHARS`) enforced with HTTP 413.
   - Blank or whitespace-only messages rejected with HTTP 422.
   - Configurable CORS origin restriction.
-- **Automated Testing Suite**: 23 automated pytest tests mocking Gemini calls (zero API costs), plus a separate manual live integration test script.
+- **Three Intelligence Modes (Swift, Balanced, Deep)**:
+  - **Swift**: Fast latency responses powered by **Gemini 2.5 Flash** with **LOW** thinking level.
+  - **Balanced**: Everyday intelligence powered by **Gemini 2.5 Flash** with **MEDIUM** thinking level.
+  - **Deep**: Advanced reasoning and complex problem-solving powered by **Gemini 2.5 Pro** with **HIGH** thinking level.
+  - Mode persistence in SQLite per conversation, seamless switching without memory fragmentation, and strict HTTP 422 rejection of unsupported modes.
+- **Full React Frontend Integration**: Modern React 19 + Vite UI with dark/light themes, real-time mode selector, conversation sidebar, markdown rendering, and backend health status banner.
+- **Automated Testing Suite**: 30 automated pytest tests mocking Gemini calls (zero API costs), plus a separate manual live integration test script.
 
 ---
 
@@ -362,7 +368,7 @@ sequenceDiagram
 
 ## 9. Automated Testing
 
-The backend includes a comprehensive pytest test suite with **23 automated unit and integration tests**. All tests use an in-memory SQLite database and mocked Gemini endpoints, allowing the entire suite to run offline with zero API cost.
+The backend includes a comprehensive pytest test suite with **30 automated unit and integration tests**. All tests use an in-memory SQLite database and mocked Gemini endpoints, allowing the entire suite to run offline with zero API cost.
 
 ### 9.1 Run Automated Tests
 

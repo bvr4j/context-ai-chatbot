@@ -10,9 +10,11 @@ REPO_ROOT = BACKEND_DIR.parent
 class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
+    gemini_flash_model: str = "gemini-2.5-flash"
+    gemini_pro_model: str = "gemini-2.5-pro"
     database_url: str = "sqlite:///./contextai.db"
     app_env: str = "development"
-    frontend_origin: str = "http://localhost:5173"
+    frontend_origin: str = "http://localhost:3000"
     max_context_messages: int = 12
     summary_trigger_messages: int = 16
     max_message_chars: int = 8000

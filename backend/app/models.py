@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from typing import Optional
 from uuid import uuid4
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
@@ -19,6 +20,9 @@ class Conversation(Base):
     )
     title: Mapped[str] = mapped_column(
         String(255), default="New Conversation", nullable=False
+    )
+    mode: Mapped[str] = mapped_column(
+        String(20), default="balanced", nullable=False
     )
     summary: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
@@ -46,6 +50,8 @@ class Message(Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    mode: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    model_label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_archived: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False, index=True
     )

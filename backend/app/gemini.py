@@ -11,6 +11,37 @@ from app.prompts import SUMMARY_INSTRUCTION
 
 logger = logging.getLogger(__name__)
 
+# Server-side allowlist for intelligence modes
+# swift: Gemini Flash, LOW thinking
+# balanced: Gemini Flash, MEDIUM thinking
+# deep: Gemini Pro, HIGH thinking
+MODE_CONFIG = {
+    "swift": {
+        "model_key": "gemini_flash_model",
+        "default_model": "gemini-2.5-flash",
+        "thinking_level": types.ThinkingLevel.LOW,
+        "thinking_name": "LOW",
+        "max_output_tokens": 1024,
+        "label_suffix": "Swift · Low Thinking",
+    },
+    "balanced": {
+        "model_key": "gemini_flash_model",
+        "default_model": "gemini-2.5-flash",
+        "thinking_level": types.ThinkingLevel.MEDIUM,
+        "thinking_name": "MEDIUM",
+        "max_output_tokens": 2048,
+        "label_suffix": "Balanced · Medium Thinking",
+    },
+    "deep": {
+        "model_key": "gemini_pro_model",
+        "default_model": "gemini-2.5-pro",
+        "thinking_level": types.ThinkingLevel.HIGH,
+        "thinking_name": "HIGH",
+        "max_output_tokens": 4096,
+        "label_suffix": "Deep · High Thinking",
+    },
+}
+
 
 class LLMProviderError(Exception):
     """Raised when the Gemini provider fails, rejects credentials, or returns unusable text."""
@@ -40,16 +71,24 @@ def _call_gemini_generate(
     instruction: str,
     temperature: float = 0.7,
     max_output_tokens: int = 1024,
+    thinking_level: Optional[types.ThinkingLevel] = None,
 ) -> str:
-    """Synchronous invocation of the Google Gen AI API."""
+    """Synchronous invocation of the Google Gen AI API with thinking configuration."""
+    thinking_config = (
+        types.ThinkingConfig(thinking_level=thinking_level)
+        if thinking_level is not None
+        else None
+    )
+    config = types.GenerateContentConfig(
+        system_instruction=instruction,
+        temperature=temperature,
+        max_output_tokens=max_output_tokens,
+        thinking_config=thinking_config,
+    )
     response = client.models.generate_content(
         model=model,
         contents=contents,
-        config=types.GenerateContentConfig(
-            system_instruction=instruction,
-            temperature=temperature,
-            max_output_tokens=max_output_tokens,
-        ),
+        config=config,
     )
     result = response.text
     if not result or not result.strip():
@@ -79,7 +118,7 @@ def _map_api_error(exc: Exception) -> LLMProviderError:
         )
     if status_code == 400 or "INVALID_ARGUMENT" in err_str:
         return LLMProviderError(
-            "The AI request format was invalid for the specified model.",
+            f"The AI request was rejected by the provider: {err_str}",
             status_code=400,
         )
 
@@ -91,35 +130,67 @@ def _map_api_error(exc: Exception) -> LLMProviderError:
 
 
 async def generate_reply(
-    contents: list[types.Content], system_instruction: str, timeout_seconds: float = 45.0
-) -> str:
-    """Generate a chat reply given the structured content history and system instruction."""
+    contents: list[types.Content],
+    system_instruction: str,
+    mode: str = "balanced",
+    timeout_seconds: float = 45.0,
+) -> tuple[str, str, str]:
+    """Generate a chat reply with model routing and thinking configuration.
+    
+    Returns:
+        tuple[str, str, str]: (reply_text, mode_name, model_label)
+    """
+    mode_clean = (mode or "balanced").strip().lower()
+    if mode_clean not in MODE_CONFIG:
+        raise LLMProviderError(
+            f"Unsupported intelligence mode '{mode}'. Must be swift, balanced, or deep.",
+            status_code=422,
+        )
+
+    cfg = MODE_CONFIG[mode_clean]
     settings = get_settings()
     client = get_client()
 
+    # Route to actual configured model
+    if mode_clean == "deep":
+        model_id = getattr(settings, "gemini_pro_model", "gemini-2.5-pro")
+    else:
+        model_id = getattr(
+            settings, "gemini_flash_model", getattr(settings, "gemini_model", "gemini-2.5-flash")
+        )
+
+    thinking_level = cfg["thinking_level"]
+    model_label = f"{model_id} ({cfg['label_suffix']})"
+
     try:
-        return await asyncio.wait_for(
+        reply_text = await asyncio.wait_for(
             asyncio.to_thread(
                 _call_gemini_generate,
                 client,
-                settings.gemini_model,
+                model_id,
                 contents,
                 system_instruction,
                 0.7,
-                1024,
+                cfg["max_output_tokens"],
+                thinking_level,
             ),
             timeout=timeout_seconds,
         )
+        return reply_text, mode_clean, model_label
     except asyncio.TimeoutError as exc:
-        logger.error("Gemini generate_reply timed out after %s seconds", timeout_seconds)
+        logger.error(
+            "Gemini generate_reply timed out after %s seconds for mode %s",
+            timeout_seconds,
+            mode_clean,
+        )
         raise LLMProviderError(
-            "The AI provider timed out waiting for a response. Please try again.",
+            f"The AI provider timed out ({mode_clean} mode). Please try again.",
             status_code=504,
         ) from exc
     except LLMProviderError:
         raise
     except Exception as exc:
-        logger.exception("Gemini API call failed during generate_reply")
+        logger.exception("Gemini API call failed during generate_reply in %s mode", mode_clean)
         raise _map_api_error(exc) from exc
 
 
@@ -128,9 +199,12 @@ async def summarize_text(
     messages: list[tuple[str, str]],
     timeout_seconds: float = 45.0,
 ) -> str:
-    """Condense older conversation turns into a rolling context memory summary."""
+    """Condense older conversation turns into a rolling context memory summary using flash model."""
     settings = get_settings()
     client = get_client()
+    model_id = getattr(
+        settings, "gemini_flash_model", getattr(settings, "gemini_model", "gemini-2.5-flash")
+    )
 
     transcript_lines = []
     for role, content in messages:
@@ -153,11 +227,12 @@ async def summarize_text(
             asyncio.to_thread(
                 _call_gemini_generate,
                 client,
-                settings.gemini_model,
+                model_id,
                 [content],
                 SUMMARY_INSTRUCTION,
                 0.3,
                 512,
+                None,  # No heavy thinking required for rolling summarization
             ),
             timeout=timeout_seconds,
         )

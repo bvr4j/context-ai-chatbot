@@ -8,8 +8,11 @@ async def test_create_conversation_default(client: AsyncClient):
     assert response.status_code == 201
     data = response.json()
     assert "conversation_id" in data
+    assert "id" in data
+    assert data["id"] == data["conversation_id"]
     assert "created_at" in data
     assert data["title"] == "New Conversation"
+    assert data["mode"] == "balanced"
     assert len(data["conversation_id"]) == 36
 
 

@@ -1,0 +1,113 @@
+@import "tailwindcss";
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *, .dark, .dark *));
+
+:root,
+[data-theme="dark"],
+.dark {
+  --bg-main: #212121;
+  --bg-sidebar: #171717;
+  --bg-composer: #303030;
+  --bg-surface: #2A2A2A;
+  --bg-hover: #2A2A2A;
+  --bg-active: #353535;
+  --bg-code: #171717;
+  --bg-code-header: #212121;
+  --text-primary: #FFFFFF;
+  --text-secondary: #B4B4B4;
+  --text-muted: #8E8E8E;
+  --border-subtle: #3A3A3A;
+  --border-hover: #555555;
+  --btn-primary-bg: #FFFFFF;
+  --btn-primary-text: #000000;
+  --btn-primary-hover: #E0E0E0;
+  --scrollbar-thumb: #3A3A3A;
+  --scrollbar-thumb-hover: #4A4A4A;
+  --error-bg: #2A1E1E;
+  --error-border: rgba(185, 28, 28, 0.6);
+  --error-text: #FECACA;
+  --modal-backdrop: rgba(0, 0, 0, 0.7);
+}
+
+[data-theme="light"],
+.light {
+  --bg-main: #FFFFFF;
+  --bg-sidebar: #F7F7F8;
+  --bg-composer: #F4F4F4;
+  --bg-surface: #ECECF1;
+  --bg-hover: #ECECF1;
+  --bg-active: #E3E3E8;
+  --bg-code: #F7F7F8;
+  --bg-code-header: #EAEAEB;
+  --text-primary: #202123;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+  --border-subtle: #E5E7EB;
+  --border-hover: #D1D5DB;
+  --btn-primary-bg: #202123;
+  --btn-primary-text: #FFFFFF;
+  --btn-primary-hover: #374151;
+  --scrollbar-thumb: #D1D5DB;
+  --scrollbar-thumb-hover: #9CA3AF;
+  --error-bg: #FEF2F2;
+  --error-border: #FCA5A5;
+  --error-text: #991B1B;
+  --modal-backdrop: rgba(0, 0, 0, 0.45);
+}
+
+@layer base {
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--bg-main);
+    color: var(--text-primary);
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+}
+
+/* Semantic Theme Utility Classes */
+.bg-app-main { background-color: var(--bg-main); }
+.bg-app-sidebar { background-color: var(--bg-sidebar); }
+.bg-app-composer { background-color: var(--bg-composer); }
+.bg-app-surface { background-color: var(--bg-surface); }
+.bg-app-hover { background-color: var(--bg-hover); }
+.bg-app-active { background-color: var(--bg-active); }
+.bg-app-code { background-color: var(--bg-code); }
+.bg-app-code-header { background-color: var(--bg-code-header); }
+
+.text-app-primary { color: var(--text-primary); }
+.text-app-secondary { color: var(--text-secondary); }
+.text-app-muted { color: var(--text-muted); }
+
+.border-app-subtle { border-color: var(--border-subtle); }
+.border-app-hover { border-color: var(--border-hover); }
+.border-app-primary { border-color: var(--text-primary); }
+
+.bg-btn-primary {
+  background-color: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+.bg-btn-primary:hover {
+  background-color: var(--btn-primary-hover);
+}
+
+.bg-app-error { background-color: var(--error-bg); }
+.border-app-error { border-color: var(--error-border); }
+.text-app-error { color: var(--error-text); }
+
+/* Minimal unobtrusive scrollbars matching ChatGPT */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
