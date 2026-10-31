@@ -5,6 +5,8 @@ from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from sqlalchemy import inspect, text
+
 from app.config import Settings, get_settings
 from app.database import Base, engine
 from app.gemini import LLMProviderError
@@ -15,42 +17,41 @@ settings = get_settings()
 
 
 def init_and_migrate_db() -> None:
-    """Ensure database tables and required schema columns exist."""
+    """Ensure database tables and required schema columns exist across SQLite and Postgres."""
     Base.metadata.create_all(bind=engine)
-    with engine.begin() as conn:
-        try:
-            conv_cols = [
-                r[1] for r in conn.exec_driver_sql("PRAGMA table_info(conversations)").fetchall()
-            ]
-            if "title" not in conv_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE conversations ADD COLUMN title VARCHAR(255) DEFAULT 'New Conversation' NOT NULL"
-                )
-            if "mode" not in conv_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE conversations ADD COLUMN mode VARCHAR(20) DEFAULT 'balanced' NOT NULL"
-                )
-        except Exception:
-            pass
+    try:
+        with engine.begin() as conn:
+            inspector = inspect(conn)
+            table_names = inspector.get_table_names()
 
-        try:
-            msg_cols = [
-                r[1] for r in conn.exec_driver_sql("PRAGMA table_info(messages)").fetchall()
-            ]
-            if "is_archived" not in msg_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE messages ADD COLUMN is_archived BOOLEAN DEFAULT 0 NOT NULL"
-                )
-            if "mode" not in msg_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE messages ADD COLUMN mode VARCHAR(20) DEFAULT NULL"
-                )
-            if "model_label" not in msg_cols:
-                conn.exec_driver_sql(
-                    "ALTER TABLE messages ADD COLUMN model_label VARCHAR(100) DEFAULT NULL"
-                )
-        except Exception:
-            pass
+            if "conversations" in table_names:
+                conv_cols = [c["name"] for c in inspector.get_columns("conversations")]
+                if "title" not in conv_cols:
+                    conn.execute(
+                        text("ALTER TABLE conversations ADD COLUMN title VARCHAR(255) DEFAULT 'New Conversation' NOT NULL")
+                    )
+                if "mode" not in conv_cols:
+                    conn.execute(
+                        text("ALTER TABLE conversations ADD COLUMN mode VARCHAR(20) DEFAULT 'balanced' NOT NULL")
+                    )
+
+            if "messages" in table_names:
+                msg_cols = [c["name"] for c in inspector.get_columns("messages")]
+                if "is_archived" not in msg_cols:
+                    default_bool = "0" if engine.dialect.name == "sqlite" else "FALSE"
+                    conn.execute(
+                        text(f"ALTER TABLE messages ADD COLUMN is_archived BOOLEAN DEFAULT {default_bool} NOT NULL")
+                    )
+                if "mode" not in msg_cols:
+                    conn.execute(
+                        text("ALTER TABLE messages ADD COLUMN mode VARCHAR(20) DEFAULT NULL")
+                    )
+                if "model_label" not in msg_cols:
+                    conn.execute(
+                        text("ALTER TABLE messages ADD COLUMN model_label VARCHAR(100) DEFAULT NULL")
+                    )
+    except Exception:
+        pass
 
 
 @asynccontextmanager
@@ -117,7 +118,7 @@ def health_check(settings: Settings = Depends(get_settings)) -> dict[str, Any]:
         "service": "contextai-api",
         "version": "0.1.0",
         "environment": settings.app_env,
-        "database": "sqlite",
+        "database": engine.dialect.name,
         "llm_configured": bool(
             settings.gemini_api_key
             and settings.gemini_api_key.strip()
