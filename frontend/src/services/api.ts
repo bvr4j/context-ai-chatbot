@@ -12,6 +12,14 @@ export const getDefaultApiBaseUrl = (): string => {
   if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
     return envUrl.trim().replace(/\/+$/, '');
   }
+  // When deployed on Vercel (unified domain without separate port 3000/5173),
+  // default to relative path "" so /api and /health route to backend via vercel.json rewrites.
+  if (typeof window !== 'undefined' && window.location.origin) {
+    const isStandaloneDev = window.location.port === '3000' || window.location.port === '5173';
+    if (!isStandaloneDev) {
+      return '';
+    }
+  }
   return 'http://localhost:8000';
 };
 

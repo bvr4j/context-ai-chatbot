@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
@@ -7,12 +8,19 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = BACKEND_DIR.parent
 
 
+def get_default_database_url() -> str:
+    # On Vercel serverless environments, only /tmp is writable for SQLite files
+    if os.getenv("VERCEL"):
+        return "sqlite:////tmp/contextai.db"
+    return "sqlite:///./contextai.db"
+
+
 class Settings(BaseSettings):
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
     gemini_flash_model: str = "gemini-2.5-flash"
     gemini_pro_model: str = "gemini-2.5-pro"
-    database_url: str = "sqlite:///./contextai.db"
+    database_url: str = get_default_database_url()
     app_env: str = "development"
     frontend_origin: str = "http://localhost:3000"
     max_context_messages: int = 12
