@@ -9,25 +9,23 @@
     "frontend": {
       "root": "frontend",
       "framework": "vite",
-      "bindings": [
+      "rewrites": [
         {
-          "type": "service",
-          "service": "backend",
-          "format": "url",
-          "env": "BACKEND_URL"
+          "source": "/(.*)",
+          "destination": "/index.html"
         }
       ]
     }
   },
   "rewrites": [
     {
-      "source": "/health",
+      "source": "/api/(.*)",
       "destination": {
         "service": "backend"
       }
     },
     {
-      "source": "/api/(.*)",
+      "source": "/health",
       "destination": {
         "service": "backend"
       }

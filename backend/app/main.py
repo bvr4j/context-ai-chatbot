@@ -67,7 +67,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS configuration supporting both Vite dev ports (3000 & 5173) and configured origins
+# CORS configuration supporting localhost development (ports 3000 & 5173) and configured origins
 allowed_origins = [settings.frontend_origin]
 for origin in [
     "http://localhost:3000",
@@ -81,7 +81,6 @@ for origin in [
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"^https?://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],

@@ -8,12 +8,18 @@ import { Conversation, Message, ChatResponse, HealthCheckResponse, IntelligenceM
 const STORAGE_KEY = 'contextai_api_base_url';
 
 export const getDefaultApiBaseUrl = (): string => {
+  // In production builds (unified domain), always use relative paths ""
+  // so requests route through same-domain vercel.json rewrites.
+  if (import.meta.env.PROD) {
+    return '';
+  }
+
   const envUrl = import.meta.env.VITE_API_BASE_URL;
   if (envUrl && typeof envUrl === 'string' && envUrl.trim().length > 0) {
     return envUrl.trim().replace(/\/+$/, '');
   }
-  // When deployed on Vercel (unified domain without separate port 3000/5173),
-  // default to relative path "" so /api and /health route to backend via vercel.json rewrites.
+
+  // Fallback for standalone development ports
   if (typeof window !== 'undefined' && window.location.origin) {
     const isStandaloneDev = window.location.port === '3000' || window.location.port === '5173';
     if (!isStandaloneDev) {
@@ -27,6 +33,11 @@ export const getApiBaseUrl = (): string => {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored && stored.trim().length > 0) {
+      // In production builds, discard stale local development URLs
+      if (import.meta.env.PROD && (stored.includes('localhost') || stored.includes('127.0.0.1'))) {
+        localStorage.removeItem(STORAGE_KEY);
+        return getDefaultApiBaseUrl();
+      }
       return stored.trim().replace(/\/+$/, '');
     }
   } catch {
@@ -138,8 +149,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     }
 
     const errorMsg = error instanceof Error ? error.message : 'Unknown network error';
+    const targetDesc = baseUrl ? `backend at ${baseUrl}` : 'backend';
     throw new ApiError(
-      `Cannot connect to backend at ${baseUrl}. Ensure the FastAPI server is running. (${errorMsg})`,
+      `Cannot connect to ${targetDesc}. Ensure the server is reachable. (${errorMsg})`,
       undefined,
       true
     );
