@@ -14,10 +14,29 @@ from app.routes.chat import router as chat_router
 settings = get_settings()
 
 
+def init_and_migrate_db() -> None:
+    """Ensure database tables and required schema columns exist."""
+    Base.metadata.create_all(bind=engine)
+    with engine.begin() as conn:
+        try:
+            conv_cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(conversations)").fetchall()]
+            if "title" not in conv_cols:
+                conn.exec_driver_sql("ALTER TABLE conversations ADD COLUMN title VARCHAR(255) DEFAULT 'New Conversation' NOT NULL")
+        except Exception:
+            pass
+
+        try:
+            msg_cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(messages)").fetchall()]
+            if "is_archived" not in msg_cols:
+                conn.exec_driver_sql("ALTER TABLE messages ADD COLUMN is_archived BOOLEAN DEFAULT 0 NOT NULL")
+        except Exception:
+            pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Initialize database tables and application resources on startup."""
-    Base.metadata.create_all(bind=engine)
+    init_and_migrate_db()
     yield
 
 
