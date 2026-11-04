@@ -26,8 +26,8 @@ from app.main import app
 @pytest.fixture(scope="session")
 def test_settings() -> Settings:
     return Settings(
-        gemini_api_key="test-api-key-12345",
-        gemini_model="gemini-3.8-flash",
+        openai_api_key="test-openai-key-12345",
+        openai_model="gpt-6-luna",
         database_url="sqlite:///:memory:",
         app_env="testing",
         frontend_origin="http://localhost:5173",
@@ -96,19 +96,25 @@ async def client(db_session, test_settings) -> AsyncGenerator[AsyncClient, None]
 
 
 @pytest.fixture
-def mock_gemini():
-    """Default mock for Gemini API calls to prevent any outbound network requests."""
+def mock_openai():
+    """Default mock for OpenAI API calls to prevent any outbound network requests."""
     with patch("app.routes.chat.generate_reply", new_callable=AsyncMock) as mock_gen, \
          patch("app.memory.summarize_text", new_callable=AsyncMock) as mock_sum, \
-         patch("app.gemini.generate_reply", new_callable=AsyncMock) as mock_gem_gen, \
-         patch("app.gemini.summarize_text", new_callable=AsyncMock) as mock_gem_sum:
+         patch("app.openai_client.generate_reply", new_callable=AsyncMock) as mock_client_gen, \
+         patch("app.openai_client.summarize_text", new_callable=AsyncMock) as mock_client_sum:
 
-        mock_gen.return_value = "This is a mock assistant reply."
+        mock_gen.return_value = ("This is a mock assistant reply.", "balanced", "gpt-6-luna (Balanced · Medium Reasoning)")
         mock_sum.return_value = "This is an updated conversation summary."
-        mock_gem_gen.return_value = "This is a mock assistant reply."
-        mock_gem_sum.return_value = "This is an updated conversation summary."
+        mock_client_gen.return_value = ("This is a mock assistant reply.", "balanced", "gpt-6-luna (Balanced · Medium Reasoning)")
+        mock_client_sum.return_value = "This is an updated conversation summary."
 
         yield {
             "generate_reply": mock_gen,
             "summarize_text": mock_sum,
         }
+
+
+@pytest.fixture
+def mock_gemini(mock_openai):
+    """Backward-compatible fixture alias for tests referencing mock_gemini."""
+    return mock_openai

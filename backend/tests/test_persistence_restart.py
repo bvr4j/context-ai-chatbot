@@ -19,8 +19,8 @@ async def test_backend_restart_persistence(tmp_path: Path):
     db_url = f"sqlite:///{db_file.as_posix()}"
 
     settings_instance = Settings(
-        gemini_api_key="test-api-key",
-        gemini_model="gemini-3.8-flash",
+        openai_api_key="test-openai-key",
+        openai_model="gpt-6-luna",
         database_url=db_url,
         app_env="testing",
         frontend_origin="http://localhost:5173",

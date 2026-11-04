@@ -22,10 +22,9 @@ def normalize_database_url(url: str) -> str:
 
 
 class Settings(BaseSettings):
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.8-flash"
-    gemini_flash_model: str = "gemini-3.8-flash"
-    gemini_pro_model: str = "gemini-3.1-pro-preview"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-6-luna"
+    gemini_api_key: str = ""  # Deprecated; retained only for backward-compatibility with legacy .env
     database_url: str = ""
     database_url_unpooled: str = ""
     app_env: str = "development"

@@ -98,8 +98,8 @@ async def test_rolling_summarization_trigger(client: AsyncClient, mock_gemini, d
 
 
 @pytest.mark.asyncio
-async def test_summary_inclusion_in_gemini_context(db_session: Session):
-    """Verify that the stored summary is formatted with non-instructional delimiters for Gemini."""
+async def test_summary_inclusion_in_openai_context(db_session: Session):
+    """Verify that the stored summary is formatted with non-instructional delimiters for OpenAI."""
     conv = Conversation(
         id="test-summary-context-uuid-111111111111",
         title="Context Check",
@@ -114,15 +114,15 @@ async def test_summary_inclusion_in_gemini_context(db_session: Session):
 
     # First content block must be the memory summary
     assert len(context) >= 3
-    summary_part_text = context[0].parts[0].text
-    assert "[CONVERSATION MEMORY SUMMARY" in summary_part_text
-    assert "User preferred dark theme and Python 3.12." in summary_part_text
-    assert context[0].role == "user"
+    summary_text = context[0]["content"]
+    assert "[CONVERSATION MEMORY SUMMARY" in summary_text
+    assert "User preferred dark theme and Python 3.12." in summary_text
+    assert context[0]["role"] == "user"
 
-    # Second content block must be model acknowledgment
-    assert context[1].role == "model"
-    assert "background summary" in context[1].parts[0].text.lower()
+    # Second content block must be assistant acknowledgment
+    assert context[1]["role"] == "assistant"
+    assert "background summary" in context[1]["content"].lower()
 
     # Third content block is the actual user message
-    assert context[2].role == "user"
-    assert context[2].parts[0].text == "What did I prefer?"
+    assert context[2]["role"] == "user"
+    assert context[2]["content"] == "What did I prefer?"

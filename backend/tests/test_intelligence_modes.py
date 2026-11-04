@@ -1,22 +1,21 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from google.genai import types
 from httpx import AsyncClient
 from sqlalchemy.orm import Session
 
-from app.gemini import generate_reply
 from app.models import Conversation
+from app.openai_client import MODE_CONFIG, generate_reply
 
 
 @pytest.mark.asyncio
 async def test_swift_mode_routing():
-    """Verify Swift mode routes to Flash model with LOW thinking level."""
-    contents = [types.Content(role="user", parts=[types.Part(text="Hello")])]
+    """Verify Swift mode routes to gpt-6-luna with low reasoning and 1024 max tokens."""
+    contents = [{"role": "user", "content": "Hello"}]
 
-    with patch("app.gemini._call_gemini_generate") as mock_generate, \
-         patch("app.gemini.get_client"):
-        mock_generate.return_value = "Swift response"
+    with patch("app.openai_client._call_responses_api_with_retry", new_callable=AsyncMock) as mock_api, \
+         patch("app.openai_client.get_client"):
+        mock_api.return_value = "Swift response"
 
         reply, mode, label = await generate_reply(
             contents, "System instruction", mode="swift"
@@ -24,26 +23,26 @@ async def test_swift_mode_routing():
 
         assert reply == "Swift response"
         assert mode == "swift"
-        assert "gemini-3.8-flash" in label
-        assert "Swift · Low Thinking" in label
+        assert "gpt-6-luna" in label
+        assert "Swift · Low Reasoning" in label
 
-        # Check call arguments to _call_gemini_generate
-        mock_generate.assert_called_once()
-        call_args = mock_generate.call_args[0]
-        # (client, model, contents, instruction, temperature, max_output_tokens, thinking_level)
-        assert call_args[1] == "gemini-3.8-flash"
-        assert call_args[5] == 1024
-        assert call_args[6] == types.ThinkingLevel.LOW
+        mock_api.assert_called_once()
+        kwargs = mock_api.call_args[1]
+        assert kwargs["model"] == "gpt-6-luna"
+        assert kwargs["reasoning_effort"] == "low"
+        assert kwargs["max_output_tokens"] == 1024
+        assert kwargs["instructions"] == "System instruction"
+        assert kwargs["input_messages"] == contents
 
 
 @pytest.mark.asyncio
 async def test_balanced_mode_routing():
-    """Verify Balanced mode routes to Flash model with MEDIUM thinking level."""
-    contents = [types.Content(role="user", parts=[types.Part(text="Hello")])]
+    """Verify Balanced mode routes to gpt-6-luna with medium reasoning and 2048 max tokens."""
+    contents = [{"role": "user", "content": "Hello"}]
 
-    with patch("app.gemini._call_gemini_generate") as mock_generate, \
-         patch("app.gemini.get_client"):
-        mock_generate.return_value = "Balanced response"
+    with patch("app.openai_client._call_responses_api_with_retry", new_callable=AsyncMock) as mock_api, \
+         patch("app.openai_client.get_client"):
+        mock_api.return_value = "Balanced response"
 
         reply, mode, label = await generate_reply(
             contents, "System instruction", mode="balanced"
@@ -51,24 +50,24 @@ async def test_balanced_mode_routing():
 
         assert reply == "Balanced response"
         assert mode == "balanced"
-        assert "gemini-3.8-flash" in label
-        assert "Balanced · Medium Thinking" in label
+        assert "gpt-6-luna" in label
+        assert "Balanced · Medium Reasoning" in label
 
-        mock_generate.assert_called_once()
-        call_args = mock_generate.call_args[0]
-        assert call_args[1] == "gemini-3.8-flash"
-        assert call_args[5] == 2048
-        assert call_args[6] == types.ThinkingLevel.MEDIUM
+        mock_api.assert_called_once()
+        kwargs = mock_api.call_args[1]
+        assert kwargs["model"] == "gpt-6-luna"
+        assert kwargs["reasoning_effort"] == "medium"
+        assert kwargs["max_output_tokens"] == 2048
 
 
 @pytest.mark.asyncio
 async def test_deep_mode_routing():
-    """Verify Deep mode routes to Pro model with HIGH thinking level."""
-    contents = [types.Content(role="user", parts=[types.Part(text="Complex logic problem")])]
+    """Verify Deep mode routes to gpt-6-luna with high reasoning and 4096 max tokens."""
+    contents = [{"role": "user", "content": "Complex logic problem"}]
 
-    with patch("app.gemini._call_gemini_generate") as mock_generate, \
-         patch("app.gemini.get_client"):
-        mock_generate.return_value = "Deep reasoning response"
+    with patch("app.openai_client._call_responses_api_with_retry", new_callable=AsyncMock) as mock_api, \
+         patch("app.openai_client.get_client"):
+        mock_api.return_value = "Deep reasoning response"
 
         reply, mode, label = await generate_reply(
             contents, "System instruction", mode="deep"
@@ -76,14 +75,14 @@ async def test_deep_mode_routing():
 
         assert reply == "Deep reasoning response"
         assert mode == "deep"
-        assert "gemini-3.1-pro-preview" in label
-        assert "Deep · High Thinking" in label
+        assert "gpt-6-luna" in label
+        assert "Deep · High Reasoning" in label
 
-        mock_generate.assert_called_once()
-        call_args = mock_generate.call_args[0]
-        assert call_args[1] == "gemini-3.1-pro-preview"
-        assert call_args[5] == 4096
-        assert call_args[6] == types.ThinkingLevel.HIGH
+        mock_api.assert_called_once()
+        kwargs = mock_api.call_args[1]
+        assert kwargs["model"] == "gpt-6-luna"
+        assert kwargs["reasoning_effort"] == "high"
+        assert kwargs["max_output_tokens"] == 4096
 
 
 @pytest.mark.asyncio
@@ -115,8 +114,8 @@ async def test_invalid_mode_rejected(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_mode_persistence_and_retrieval(client: AsyncClient, mock_gemini, db_session: Session):
-    """Verify initial mode creation, persistence in SQLite, and retrieval."""
+async def test_mode_persistence_and_retrieval(client: AsyncClient, mock_openai, db_session: Session):
+    """Verify initial mode creation, persistence in database, and retrieval."""
     res = await client.post(
         "/api/conversations",
         json={"title": "Deep Analysis Session", "mode": "deep"},
@@ -126,7 +125,7 @@ async def test_mode_persistence_and_retrieval(client: AsyncClient, mock_gemini, 
     assert data["mode"] == "deep"
     convo_id = data["conversation_id"]
 
-    # Verify directly in SQLite model
+    # Verify directly in SQLite/Postgres model
     conv_db = db_session.get(Conversation, convo_id)
     assert conv_db is not None
     assert conv_db.mode == "deep"
@@ -146,7 +145,7 @@ async def test_mode_persistence_and_retrieval(client: AsyncClient, mock_gemini, 
 
 
 @pytest.mark.asyncio
-async def test_mode_switching_preserves_history(client: AsyncClient, mock_gemini, db_session: Session):
+async def test_mode_switching_preserves_history(client: AsyncClient, mock_openai, db_session: Session):
     """Verify switching modes updates conversation mode without resetting or fragmenting history."""
     res = await client.post(
         "/api/conversations",
@@ -155,8 +154,8 @@ async def test_mode_switching_preserves_history(client: AsyncClient, mock_gemini
     convo_id = res.json()["conversation_id"]
 
     # Turn 1: Swift
-    mock_gemini["generate_reply"].return_value = (
-        "Quick answer", "swift", "gemini-3.8-flash (Swift · Low Thinking)"
+    mock_openai["generate_reply"].return_value = (
+        "Quick answer", "swift", "gpt-6-luna (Swift · Low Reasoning)"
     )
     chat1 = await client.post(
         "/api/chat",
@@ -174,8 +173,8 @@ async def test_mode_switching_preserves_history(client: AsyncClient, mock_gemini
     assert patch_res.json()["mode"] == "deep"
 
     # Turn 2: Deep
-    mock_gemini["generate_reply"].return_value = (
-        "Deep complex analysis", "deep", "gemini-3.1-pro-preview (Deep · High Thinking)"
+    mock_openai["generate_reply"].return_value = (
+        "Deep complex analysis", "deep", "gpt-6-luna (Deep · High Reasoning)"
     )
     chat2 = await client.post(
         "/api/chat",
@@ -183,7 +182,7 @@ async def test_mode_switching_preserves_history(client: AsyncClient, mock_gemini
     )
     assert chat2.status_code == 200
     assert chat2.json()["mode"] == "deep"
-    assert "gemini-3.1-pro-preview" in chat2.json()["model_label"]
+    assert "gpt-6-luna" in chat2.json()["model_label"]
 
     # Verify full history is intact (4 messages: 2 user + 2 assistant)
     hist_res = await client.get(f"/api/conversations/{convo_id}")
@@ -198,13 +197,13 @@ async def test_mode_switching_preserves_history(client: AsyncClient, mock_gemini
 
 
 @pytest.mark.asyncio
-async def test_chat_response_contract_metadata(client: AsyncClient, mock_gemini):
+async def test_chat_response_contract_metadata(client: AsyncClient, mock_openai):
     """Verify ChatResponse returns all required metadata fields."""
     res = await client.post("/api/conversations")
     convo_id = res.json()["conversation_id"]
 
-    mock_gemini["generate_reply"].return_value = (
-        "Balanced reply", "balanced", "gemini-3.8-flash (Balanced · Medium Thinking)"
+    mock_openai["generate_reply"].return_value = (
+        "Balanced reply", "balanced", "gpt-6-luna (Balanced · Medium Reasoning)"
     )
 
     chat_res = await client.post(
@@ -218,51 +217,20 @@ async def test_chat_response_contract_metadata(client: AsyncClient, mock_gemini)
     assert "id" in body
     assert body["reply"] == "Balanced reply"
     assert body["mode"] == "balanced"
-    assert body["model_label"] == "gemini-3.8-flash (Balanced · Medium Thinking)"
+    assert body["model_label"] == "gpt-6-luna (Balanced · Medium Reasoning)"
     assert "context_summary" in body
     assert "messages_in_context" in body
     assert body["messages_in_context"] == 2
 
 
 @pytest.mark.asyncio
-async def test_no_silent_fallback_between_models():
-    """Verify that swift/balanced never silently fall back to the pro model and vice versa."""
-    contents = [types.Content(role="user", parts=[types.Part(text="Test")])]
-
-    for mode_name, expected_model in [
-        ("swift", "gemini-3.8-flash"),
-        ("balanced", "gemini-3.8-flash"),
-        ("deep", "gemini-3.1-pro-preview"),
-    ]:
-        with patch("app.gemini._call_gemini_generate") as mock_generate, \
-             patch("app.gemini.get_client"):
-            mock_generate.return_value = f"{mode_name} response"
-
-            reply, mode, label = await generate_reply(
-                contents, "System instruction", mode=mode_name
-            )
-
-            call_args = mock_generate.call_args[0]
-            actual_model = call_args[1]
-            assert actual_model == expected_model, (
-                f"Mode '{mode_name}' routed to '{actual_model}' instead of '{expected_model}'"
-            )
-            assert expected_model in label
-
-
-@pytest.mark.asyncio
-async def test_mode_config_thinking_levels():
-    """Verify each mode has the correct thinking level and output token configuration."""
-    from app.gemini import MODE_CONFIG
-
-    assert MODE_CONFIG["swift"]["thinking_level"] == types.ThinkingLevel.LOW
+async def test_mode_config_reasoning_levels():
+    """Verify each mode has the correct reasoning level and output token configuration."""
+    assert MODE_CONFIG["swift"]["reasoning_effort"] == "low"
     assert MODE_CONFIG["swift"]["max_output_tokens"] == 1024
-    assert MODE_CONFIG["swift"]["default_model"] == "gemini-3.8-flash"
 
-    assert MODE_CONFIG["balanced"]["thinking_level"] == types.ThinkingLevel.MEDIUM
+    assert MODE_CONFIG["balanced"]["reasoning_effort"] == "medium"
     assert MODE_CONFIG["balanced"]["max_output_tokens"] == 2048
-    assert MODE_CONFIG["balanced"]["default_model"] == "gemini-3.8-flash"
 
-    assert MODE_CONFIG["deep"]["thinking_level"] == types.ThinkingLevel.HIGH
+    assert MODE_CONFIG["deep"]["reasoning_effort"] == "high"
     assert MODE_CONFIG["deep"]["max_output_tokens"] == 4096
-    assert MODE_CONFIG["deep"]["default_model"] == "gemini-3.1-pro-preview"

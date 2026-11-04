@@ -5,8 +5,8 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.gemini import LLMProviderError
 from app.models import Conversation, Message
+from app.openai_client import LLMProviderError
 
 
 @pytest.mark.asyncio

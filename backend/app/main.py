@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.database import Base, engine, get_db
-from app.gemini import LLMProviderError
+from app.openai_client import LLMProviderError
 from app.models import Conversation, Message  # noqa: F401 - register ORM metadata
 from app.routes.chat import router as chat_router
 
@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 app = FastAPI(
     title="ContextAI API",
-    description="A stateful, context-aware multi-turn chatbot powered by Google Gemini and SQLite memory.",
+    description="A stateful, context-aware multi-turn chatbot powered by OpenAI and persistent memory.",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -100,13 +100,12 @@ def health_check(
         "environment": settings.app_env,
         "database": db_dialect,
         "database_status": "healthy" if db_healthy else "unhealthy",
+        "llm_provider": "openai",
         "llm_configured": bool(
-            settings.gemini_api_key
-            and settings.gemini_api_key.strip()
-            not in ("", "replace_with_your_gemini_api_key", "your_gemini_api_key_here")
+            settings.openai_api_key
+            and settings.openai_api_key.strip()
+            not in ("", "replace_with_your_openai_api_key", "your_openai_api_key_here")
         ),
-        "model": settings.gemini_model,
-        "flash_model": settings.gemini_flash_model,
-        "pro_model": settings.gemini_pro_model,
+        "model": settings.openai_model,
         "supported_modes": ["swift", "balanced", "deep"],
     }

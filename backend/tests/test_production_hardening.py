@@ -164,7 +164,8 @@ async def test_neon_postgresql_live_crud():
     neon_settings = Settings(
         app_env="development",
         database_url=neon_url,
-        gemini_api_key="test-api-key",
+        openai_api_key="test-api-key",
+        openai_model="gpt-6-luna",
     )
 
     app.dependency_overrides[get_db] = neon_get_db

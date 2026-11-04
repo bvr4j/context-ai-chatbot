@@ -1,6 +1,6 @@
 # ContextAI — Stateful LLM Chatbot with Persistent Memory
 
-ContextAI is a production-grade, stateful multi-turn conversational AI backend built with **FastAPI**, **Google Gemini API** (using the official `google-genai` SDK), and **SQLite with SQLAlchemy 2.x**.
+ContextAI is a production-grade, stateful multi-turn conversational AI backend built with **FastAPI**, **OpenAI Responses API** (using the official `openai` SDK with `AsyncOpenAI`), and **SQLite / Neon PostgreSQL with SQLAlchemy 2.x**.
 
 It solves a fundamental problem in real-world LLM applications: maintaining conversational continuity and persistent long-term memory across server restarts, while dynamically managing context-window boundaries through rolling conversation summarization.
 
@@ -18,17 +18,17 @@ flowchart TD
     subgraph Backend ["ContextAI Backend"]
         FastAPI -->|"Dependency Injection"| Router["Chat Router\n(app/routes/chat.py)"]
         Router -->|"Input Validation"| Pydantic["Pydantic Schemas\n(app/schemas.py)"]
-        Router -->|"Session & History"| SQLite[("SQLite Database\n(contextai.db)\nPRAGMA foreign_keys=ON")]
+        Router -->|"Session & History"| SQLite[("Database\n(SQLite / Neon PostgreSQL)\nForeign Keys Enforced")]
         
         Router -->|"Build Bounded Context"| MemoryMgr["Context Window Manager\n(app/memory.py)"]
         MemoryMgr -->|"Rolling Memory"| SQLite
-        MemoryMgr -->|"If history > trigger"| Summarizer["Rolling Summarizer\n(app/gemini.py)"]
+        MemoryMgr -->|"If history > trigger"| Summarizer["Rolling Summarizer\n(app/openai_client.py)"]
         
-        Router -->|"Generate Reply"| GeminiClient["Gemini Client\n(app/gemini.py)"]
+        Router -->|"Generate Reply"| OpenAIClient["OpenAI Client\n(app/openai_client.py)"]
     end
 
-    Summarizer -->|"google-genai SDK\n(temperature=0.3)"| GeminiAPI["Google Gemini API\n(gemini-3.8-flash)"]
-    GeminiClient -->|"google-genai SDK\n(temperature=0.7)"| GeminiAPI
+    Summarizer -->|"Responses API\n(reasoning: low, 512 tokens)"| OpenAIAPI["OpenAI API\n(gpt-6-luna)"]
+    OpenAIClient -->|"Responses API\n(reasoning: low/med/high)"| OpenAIAPI
 ```
 
 ---
@@ -36,16 +36,16 @@ flowchart TD
 ## 2. Key Features
 
 - **Multi-Turn Stateful Conversations**: Maintains independent message histories across separate conversation sessions identified by UUIDs.
-- **Persistent Conversation Memory**: All conversations, titles, summaries, and messages are persisted in SQLite using SQLAlchemy 2.x models with `PRAGMA foreign_keys = ON` and cascade deletion. Messages survive full backend reboots.
+- **Persistent Conversation Memory**: All conversations, titles, summaries, and messages are persisted in SQLite/PostgreSQL using SQLAlchemy 2.x models with cascade deletion. Messages survive full backend reboots.
 - **Rolling Context-Window Management**:
   - Dynamically retains recent messages within a configurable context budget (`MAX_CONTEXT_MESSAGES`).
   - When history exceeds the trigger threshold (`SUMMARY_TRIGGER_MESSAGES`), older turns are automatically summarized into a cumulative factual memory.
   - **Never splits user/assistant pairs**: Summarization strictly processes balanced `(user, assistant)` turns, preventing orphaned messages.
-  - **Archival strategy**: Older messages are archived in SQLite rather than deleted, allowing full conversation history inspection in `GET /api/conversations/{id}` while keeping the active LLM context strictly bounded.
+  - **Archival strategy**: Older messages are archived in the database rather than deleted, allowing full conversation history inspection in `GET /api/conversations/{id}` while keeping the active LLM context strictly bounded.
   - **Anti-Prompt-Injection Delimiters**: Summaries are structured as factual context and acknowledged by the model, preventing summaries from being interpreted as fresh user instructions.
-- **Custom System Persona (`prompts.py`)**: Dedicated prompt defining an intelligent, technically accurate, concise assistant that acknowledges uncertainty and never hallucinates remembered facts.
+- **Custom System Persona (`prompts.py`)**: Dedicated prompt defining an intelligent, technically accurate, concise assistant that acknowledges uncertainty and never hallucinates remembered facts, passed via OpenAI's `instructions` parameter.
 - **Resilient Error Handling**:
-  - Catches invalid API keys (401/403), rate limits (429), timeouts (504), service unavailability (502/503), and empty responses.
+  - Catches invalid API keys (401/403), rate limits (429), timeouts (504), service unavailability (500/502/503), and empty responses.
   - Reverts uncommitted user messages upon upstream failures to avoid orphaned state.
   - Never leaks API keys, raw exceptions, or stack traces in HTTP responses.
 - **Security & Validation**:
@@ -54,12 +54,12 @@ flowchart TD
   - Blank or whitespace-only messages rejected with HTTP 422.
   - Configurable CORS origin restriction.
 - **Three Intelligence Modes (Swift, Balanced, Deep)**:
-  - **Swift**: Fast latency responses powered by **Gemini 3.8 Flash** with **LOW** thinking level.
-  - **Balanced**: Everyday intelligence powered by **Gemini 3.8 Flash** with **MEDIUM** thinking level.
-  - **Deep**: Advanced reasoning and complex problem-solving powered by **Gemini 3.1 Pro** with **HIGH** thinking level.
-  - Mode persistence in SQLite per conversation, seamless switching without memory fragmentation, and strict HTTP 422 rejection of unsupported modes.
+  - **Swift**: Fast latency responses powered by **GPT-6 Luna** (`gpt-6-luna`) with **low** reasoning effort and 1024 output tokens.
+  - **Balanced**: Everyday intelligence powered by **GPT-6 Luna** (`gpt-6-luna`) with **medium** reasoning effort and 2048 output tokens.
+  - **Deep**: Advanced reasoning and complex problem-solving powered by **GPT-6 Luna** (`gpt-6-luna`) with **high** reasoning effort and 4096 output tokens.
+  - Mode persistence per conversation, seamless switching without memory fragmentation, and strict HTTP 422 rejection of unsupported modes.
 - **Full React Frontend Integration**: Modern React 19 + Vite UI with dark/light themes, real-time mode selector, conversation sidebar, markdown rendering, and backend health status banner.
-- **Automated Testing Suite**: 30 automated pytest tests mocking Gemini calls (zero API costs), plus a separate manual live integration test script.
+- **Automated Testing Suite**: 56 automated pytest unit and integration tests mocking OpenAI calls (zero API costs), plus a separate manual live integration smoke test script.
 
 ---
 
@@ -70,9 +70,10 @@ flowchart TD
 | **Runtime** | Python 3.11+ | Python asynchronous backend environment |
 | **API Framework** | FastAPI (0.115+) | High-performance ASGI framework with Pydantic v2 |
 | **Server** | Uvicorn (0.30+) | Lightning-fast ASGI web server |
-| **LLM SDK** | `google-genai` (1.0+) | Official Google Gen AI Python SDK |
-| **LLM Model** | Gemini 3.8 Flash / Gemini 3.1 Pro | Default flash model (`gemini-3.8-flash`), pro model (`gemini-3.1-pro-preview`) |
-| **ORM & Database** | SQLAlchemy 2.x & SQLite | Relational database with cascade foreign keys |
+| **LLM SDK** | `openai` (1.60+) | Official OpenAI Python SDK (`AsyncOpenAI`) |
+| **LLM API** | Responses API (`client.responses.create`) | OpenAI Responses API with native reasoning effort control |
+| **LLM Model** | GPT-6 Luna (`gpt-6-luna`) | Fast, efficient reasoning model with tunable effort |
+| **ORM & Database** | SQLAlchemy 2.x & SQLite / PostgreSQL | Relational database with cascade foreign keys |
 | **Settings** | Pydantic Settings 2.x | Validated environment configuration |
 | **Testing** | pytest & pytest-asyncio | Asynchronous test framework |
 | **HTTP Client** | HTTPX (0.27+) | Async client for API testing and requests |
@@ -98,14 +99,14 @@ context-ai-chatbot/
 │   │   ├── models.py               # SQLAlchemy models (Conversation, Message)
 │   │   ├── schemas.py              # Pydantic v2 request/response schemas
 │   │   ├── prompts.py              # System instructions and memory condensation prompt
-│   │   ├── gemini.py               # Official google-genai SDK client, retry & error mapping
+│   │   ├── openai_client.py        # Official OpenAI AsyncOpenAI client, Responses API & error mapping
 │   │   ├── memory.py               # Context window manager, turn pairing, rolling summarizer
 │   │   └── routes/
 │   │       ├── __init__.py
 │   │       └── chat.py             # REST API endpoints (/api/conversations, /api/chat)
 │   └── tests/
 │       ├── __init__.py
-│       ├── conftest.py             # Test fixtures (in-memory SQLite, mock Gemini)
+│       ├── conftest.py             # Test fixtures (in-memory SQLite, mock OpenAI)
 │       ├── test_health.py          # /health and root endpoint tests
 │       ├── test_conversations.py   # CRUD tests for conversations
 │       ├── test_chat_validation.py # Edge cases (empty, invalid ID, oversized)
@@ -113,7 +114,8 @@ context-ai-chatbot/
 │       ├── test_memory_and_context.py # Multi-conversation isolation and rolling summary
 │       ├── test_five_turn_conversation.py # 5-turn multi-turn dialogue retention
 │       ├── test_persistence_restart.py    # Database persistence across server reboots
-│       └── test_gemini_live.py     # Standalone manual live test with real Gemini API key
+│       ├── test_openai_client.py   # Comprehensive OpenAI client and mode routing tests
+│       └── test_openai_live.py     # Standalone manual live smoke test with real OpenAI API key
 └── frontend/                       # Reserved for frontend integration
 ```
 
@@ -123,7 +125,7 @@ context-ai-chatbot/
 
 ### 5.1 Prerequisites
 - Python 3.11 or higher
-- A Google Gemini API key from [Google AI Studio](https://aistudio.google.com/apikey)
+- An OpenAI API key from [OpenAI Platform](https://platform.openai.com/api-keys)
 
 ### 5.2 Clone Repository
 ```bash
@@ -163,11 +165,10 @@ Copy-Item backend/.env.example backend/.env
 cp backend/.env.example backend/.env
 ```
 
-Open `backend/.env` and insert your Gemini API key:
+Open `backend/.env` and insert your OpenAI API key:
 ```env
-# Generate at https://aistudio.google.com/apikey
-GEMINI_API_KEY=your_actual_gemini_api_key_here
-GEMINI_MODEL=gemini-3.8-flash
+OPENAI_API_KEY=your_actual_openai_api_key_here
+OPENAI_MODEL=gpt-6-luna
 DATABASE_URL=sqlite:///./contextai.db
 APP_ENV=development
 FRONTEND_ORIGIN=http://localhost:5173
@@ -196,7 +197,7 @@ python -m uvicorn app.main:app --reload --app-dir backend
 ## 7. API Specification
 
 ### 7.1 `GET /health`
-Returns backend health status, active LLM model, and environment.
+Returns backend health status, active LLM provider and model, and environment.
 
 **Response (200 OK):**
 ```json
@@ -204,8 +205,13 @@ Returns backend health status, active LLM model, and environment.
   "status": "ok",
   "service": "contextai-api",
   "version": "0.1.0",
-  "model": "gemini-3.8-flash",
-  "environment": "development"
+  "environment": "development",
+  "database": "sqlite",
+  "database_status": "healthy",
+  "llm_provider": "openai",
+  "llm_configured": true,
+  "model": "gpt-6-luna",
+  "supported_modes": ["swift", "balanced", "deep"]
 }
 ```
 
@@ -289,7 +295,7 @@ Deletes a conversation and its cascaded message history.
 ---
 
 ### 7.6 `POST /api/chat`
-Sends a user message within an existing conversation, invokes Gemini with bounded context, and stores the response.
+Sends a user message within an existing conversation, invokes OpenAI with bounded context, and stores the response.
 
 **Request Body:**
 ```json
@@ -313,9 +319,9 @@ Sends a user message within an existing conversation, invokes Gemini with bounde
 - `404 Not Found`: If `conversation_id` does not exist.
 - `413 Payload Too Large`: If message length exceeds `MAX_MESSAGE_CHARS`.
 - `422 Unprocessable Content`: If message is empty or whitespace-only.
-- `429 Too Many Requests`: If Gemini API rate limit is exceeded.
-- `502 Bad Gateway`: If Gemini rejects the API key or returns an upstream network error.
-- `504 Gateway Timeout`: If Gemini times out.
+- `429 Too Many Requests`: If OpenAI API rate limit is exceeded.
+- `502 Bad Gateway`: If OpenAI rejects the API key or returns an upstream network error.
+- `504 Gateway Timeout`: If OpenAI times out.
 
 ---
 
@@ -332,8 +338,8 @@ sequenceDiagram
     actor User
     participant Route as routes/chat.py
     participant Memory as memory.py
-    participant DB as SQLite DB
-    participant Gemini as Gemini API
+    participant DB as Database
+    participant OpenAI as OpenAI API
 
     User->>Route: POST /api/chat (message)
     Route->>DB: Persist user message
@@ -343,32 +349,32 @@ sequenceDiagram
         Note over Memory: Check active messages count
         alt active messages >= SUMMARY_TRIGGER_MESSAGES
             Memory->>Memory: Find balanced (user, assistant) turn boundary
-            Memory->>Gemini: summarize_text(existing_summary, older_turns)
-            Gemini-->>Memory: Updated cumulative summary
+            Memory->>OpenAI: summarize_text(existing_summary, older_turns)
+            OpenAI-->>Memory: Updated cumulative summary
             Memory->>DB: Update conversation.summary
             Memory->>DB: Set older messages is_archived = True
         end
     end
 
-    Memory->>Route: Formatted Gemini context (Summary + Recent Turns)
-    Route->>Gemini: generate_reply(context, system_instruction)
-    Gemini-->>Route: Assistant reply text
+    Memory->>Route: Formatted OpenAI context (Summary + Recent Turns)
+    Route->>OpenAI: generate_reply(context, system_instruction)
+    OpenAI-->>Route: Assistant reply text
     Route->>DB: Persist assistant message
     Route-->>User: ChatResponse (reply, summary, messages_in_context)
 ```
 
 ### 8.3 Invariants Maintained
 1. **Never Split Turn Pairs**: Summarization checks `_find_balanced_turn_split()` to ensure that user prompts are never separated from their assistant responses. A pending user message is never summarized prematurely.
-2. **Never Discard Important Information**: Older turns are marked `is_archived = True` in SQLite. When a user requests conversation history via `GET /api/conversations/{id}`, the complete audit log is available.
+2. **Never Discard Important Information**: Older turns are marked `is_archived = True` in the database. When a user requests conversation history via `GET /api/conversations/{id}`, the complete audit log is available.
 3. **Avoid Re-Summarizing**: Once messages are archived, they are excluded from future active message counts, preventing redundant summarization costs.
-4. **Anti-Prompt-Injection Grounding**: The summary is passed as a dedicated system context block acknowledged by a simulated model response (`"Understood. I will use this background summary strictly as context..."`). This ensures Gemini treats remembered facts as background data rather than executable instructions.
+4. **Anti-Prompt-Injection Grounding**: The summary is passed as a dedicated system context block acknowledged by a simulated assistant response (`"Understood. I will use this background summary strictly as context..."`). This ensures the model treats remembered facts as background data rather than executable instructions.
 5. **Token-Budgeting Strategy**: We provide message-count budgeting (`MAX_CONTEXT_MESSAGES`) coupled with heuristic token estimation (`estimate_tokens`). While token count can vary slightly across Unicode scripts, message-turn budgeting guarantees conversational integrity by preserving balanced turns.
 
 ---
 
 ## 9. Automated Testing
 
-The backend includes a comprehensive pytest test suite with **30 automated unit and integration tests**. All tests use an in-memory SQLite database and mocked Gemini endpoints, allowing the entire suite to run offline with zero API cost.
+The backend includes a comprehensive pytest test suite with **58 automated unit and integration tests**. All tests use an in-memory SQLite database and mocked OpenAI endpoints, allowing the entire suite to run offline with zero API cost.
 
 ### 9.1 Run Automated Tests
 
@@ -376,49 +382,12 @@ The backend includes a comprehensive pytest test suite with **30 automated unit 
 .\.venv\Scripts\pytest -v
 ```
 
-**Output:**
-```
-============================= test session starts =============================
-platform win32 -- Python 3.14.3, pytest-9.2.0, pluggy-1.7.0
-rootdir: C:\Users\BVR4J\Downloads\context-ai-chatbot
-configfile: pytest.ini
-testpaths: backend/tests
-
-backend/tests/test_chat_flow.py::test_chat_successful_turn PASSED        [  4%]
-backend/tests/test_chat_flow.py::test_chat_auto_titling PASSED           [  8%]
-backend/tests/test_chat_flow.py::test_chat_llm_provider_error_handling PASSED [ 12%]
-backend/tests/test_chat_flow.py::test_chat_timeout_handling PASSED       [ 16%]
-backend/tests/test_chat_validation.py::test_chat_empty_message PASSED    [ 20%]
-backend/tests/test_chat_validation.py::test_chat_invalid_conversation_id_length PASSED [ 24%]
-backend/tests/test_chat_validation.py::test_chat_nonexistent_conversation PASSED [ 28%]
-backend/tests/test_chat_validation.py::test_chat_oversized_message PASSED [ 32%]
-backend/tests/test_conversations.py::test_create_conversation_default PASSED [ 36%]
-backend/tests/test_conversations.py::test_create_conversation_custom_title PASSED [ 40%]
-backend/tests/test_conversations.py::test_list_conversations PASSED      [ 44%]
-backend/tests/test_conversations.py::test_get_conversation_details_and_history PASSED [ 48%]
-backend/tests/test_conversations.py::test_get_nonexistent_conversation PASSED [ 52%]
-backend/tests/test_conversations.py::test_delete_conversation PASSED     [ 56%]
-backend/tests/test_conversations.py::test_delete_nonexistent_conversation PASSED [ 60%]
-backend/tests/test_five_turn_conversation.py::test_five_turn_memory_retention PASSED [ 64%]
-backend/tests/test_gemini_live.py::test_live_gemini_reply SKIPPED        [ 68%]
-backend/tests/test_gemini_live.py::test_live_gemini_summarization SKIPPED [ 72%]
-backend/tests/test_health.py::test_health_check_endpoint PASSED          [ 76%]
-backend/tests/test_health.py::test_root_endpoint PASSED                  [ 80%]
-backend/tests/test_memory_and_context.py::test_independent_conversation_histories PASSED [ 84%]
-backend/tests/test_memory_and_context.py::test_balanced_turn_split_helper PASSED [ 88%]
-backend/tests/test_memory_and_context.py::test_rolling_summarization_trigger PASSED [ 92%]
-backend/tests/test_memory_and_context.py::test_summary_inclusion_in_gemini_context PASSED [ 96%]
-backend/tests/test_persistence_restart.py::test_backend_restart_persistence PASSED [100%]
-
-======================== 23 passed, 2 skipped in 0.32s ========================
-```
-
-### 9.2 Running the Live Gemini Integration Test
-To run a real outbound test against Google's Gemini API:
-1. Ensure your `backend/.env` has a valid `GEMINI_API_KEY`.
+### 9.2 Running the Live OpenAI Integration Test
+To run a real outbound test against OpenAI's API:
+1. Ensure your `backend/.env` has a valid `OPENAI_API_KEY`.
 2. Execute:
 ```bash
-python backend/tests/test_gemini_live.py
+python backend/tests/test_openai_live.py
 ```
 
 ---
@@ -482,7 +451,7 @@ Per Neon best practices, schema migrations (DDL operations) must use a **direct 
 
 ## 12. Security Considerations for Production
 
-1. **API Key Isolation**: `GEMINI_API_KEY` is loaded server-side only through Pydantic Settings and is never sent to the client or written into logs.
+1. **API Key Isolation**: `OPENAI_API_KEY` is loaded server-side only through Pydantic Settings and is never sent to the client or written into logs.
 2. **CORS Hardening**: In production (`APP_ENV=production`), CORS restricts requests strictly to the configured `FRONTEND_ORIGIN`.
 3. **Input Sanitization**: Content length is strictly capped at `MAX_MESSAGE_CHARS` (HTTP 413) to protect against buffer exhaustion and excessive token billing.
 4. **Production Deployment Requirements**:

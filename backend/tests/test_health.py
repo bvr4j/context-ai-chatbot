@@ -11,6 +11,12 @@ async def test_health_check_endpoint(client: AsyncClient):
     assert data["service"] == "contextai-api"
     assert "version" in data
     assert "model" in data
+    assert data["model"] == "gpt-6-luna"
+    assert data["llm_provider"] == "openai"
+    assert data["llm_configured"] is True
+    # Verify no credentials or API keys exposed in health payload
+    assert "sk-" not in str(data)
+    assert "api_key" not in str(data).lower()
 
 
 @pytest.mark.asyncio

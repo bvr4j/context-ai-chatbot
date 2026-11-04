@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.database import get_db
-from app.gemini import LLMProviderError, generate_reply
+from app.openai_client import LLMProviderError, generate_reply
 from app.memory import build_context, get_conversation_messages, get_conversation_or_none
 from app.models import Conversation, Message, utc_now
 from app.prompts import SYSTEM_INSTRUCTION
@@ -261,20 +261,20 @@ async def chat(
     try:
         # Build context (performs rolling summarization if threshold reached)
         context = await build_context(db, conversation, settings=settings)
-        # Call Gemini with mode routing and thinking configuration
-        gemini_result = await generate_reply(
+        # Call OpenAI with mode routing and reasoning configuration
+        llm_result = await generate_reply(
             context, SYSTEM_INSTRUCTION, mode=requested_mode
         )
-        if isinstance(gemini_result, tuple) and len(gemini_result) == 3:
-            reply, used_mode, model_label = gemini_result
-        elif isinstance(gemini_result, str):
-            reply = gemini_result
+        if isinstance(llm_result, tuple) and len(llm_result) == 3:
+            reply, used_mode, model_label = llm_result
+        elif isinstance(llm_result, str):
+            reply = llm_result
             used_mode = requested_mode
-            model_label = f"{settings.gemini_flash_model} ({requested_mode.capitalize()})"
+            model_label = f"{settings.openai_model} ({requested_mode.capitalize()})"
         else:
-            reply = str(gemini_result)
+            reply = str(llm_result)
             used_mode = requested_mode
-            model_label = f"{settings.gemini_flash_model} ({requested_mode.capitalize()})"
+            model_label = f"{settings.openai_model} ({requested_mode.capitalize()})"
     except LLMProviderError as exc:
         logger.error("LLMProviderError during chat (%s mode): %s (status %d)", requested_mode, exc.message, exc.status_code)
         try:
@@ -307,7 +307,7 @@ async def chat(
     conversation.updated_at = utc_now()
     db.commit()
 
-    # Total messages in context includes context sent to Gemini plus the newly added assistant reply
+    # Total messages in context includes context sent to OpenAI plus the newly added assistant reply
     messages_in_context = len(context) + 1
 
     return ChatResponse(
