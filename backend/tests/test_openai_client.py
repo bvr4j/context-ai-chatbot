@@ -388,3 +388,4 @@ async def test_no_silent_gemini_fallback_on_failure():
         assert exc_info.value.status_code == 429
         # Gemini must NEVER be called
         mock_gemini_gen.assert_not_called()
+

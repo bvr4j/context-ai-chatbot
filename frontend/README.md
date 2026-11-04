@@ -33,9 +33,9 @@ A minimal, professional, ChatGPT-inspired frontend for **ContextAI**, a stateful
 - **Context & Memory Visualization**: Unobtrusive context indicator displaying active retained messages (`messages_in_context`) and conversation memory summaries (`context_summary`) received from the backend.
 - **Rich Markdown & Code Blocks**: Full markdown rendering with headers, lists, blockquotes, tables, inline code, and syntax-styled code blocks with a one-click copy button.
 - **Three Intelligence Modes**:
-  - **Swift**: Fast responses and low latency (Flash model, LOW thinking level).
-  - **Balanced** (Default): Everyday intelligence with optimal speed/quality balance (Flash model, MEDIUM thinking level).
-  - **Deep**: Advanced reasoning and complex analysis (Pro model, HIGH thinking level).
+  - **Swift**: Fast responses and low latency (`gpt-6-luna`, low reasoning effort, 1024 output tokens).
+  - **Balanced** (Default): Everyday intelligence with optimal speed/quality balance (`gpt-6-luna`, medium reasoning effort, 2048 output tokens).
+  - **Deep**: Advanced reasoning and complex analysis (`gpt-6-luna`, high reasoning effort, 4096 output tokens).
 - **Zero Dummy Data Policy**: Only displays verified data retrieved from the backend. When backend is offline or empty, displays real diagnostic connection states and clean empty placeholders.
 - **Robust Error Handling**: Non-intrusive backend diagnostic alerts, retry controls for failed messages, and automatic connection health verification.
 - **Configurable Backend Endpoint**: Easily switch or test backend URLs via the Settings panel (`VITE_API_BASE_URL`).
@@ -53,6 +53,7 @@ ContextAI communicates with the following endpoints:
 | `POST` | `/api/conversations` | Create a new conversation (`{ "title"?: string, "mode"?: "swift" \| "balanced" \| "deep" }`) |
 | `GET` | `/api/conversations` | Retrieve all conversations sorted by recency |
 | `GET` | `/api/conversations/{id}` | Retrieve conversation message history, mode, and context summary |
+| `PATCH` | `/api/conversations/{id}/mode` | Update conversation intelligence mode (`{ "mode": "swift" \| "balanced" \| "deep" }`) |
 | `DELETE` | `/api/conversations/{id}` | Delete a conversation and its persisted history |
 | `POST` | `/api/chat` | Send user message with selected mode and receive stateful AI response |
 

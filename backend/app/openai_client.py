@@ -278,3 +278,4 @@ async def summarize_text(
 def estimate_tokens(text: str) -> int:
     """Heuristic token estimation (~4 characters per token)."""
     return max(1, (len(text) + 3) // 4)
+
