@@ -27,7 +27,7 @@ flowchart TD
         Router -->|"Generate Reply"| GeminiClient["Gemini Client\n(app/gemini.py)"]
     end
 
-    Summarizer -->|"google-genai SDK\n(temperature=0.3)"| GeminiAPI["Google Gemini API\n(gemini-2.5-flash)"]
+    Summarizer -->|"google-genai SDK\n(temperature=0.3)"| GeminiAPI["Google Gemini API\n(gemini-3.8-flash)"]
     GeminiClient -->|"google-genai SDK\n(temperature=0.7)"| GeminiAPI
 ```
 
@@ -54,9 +54,9 @@ flowchart TD
   - Blank or whitespace-only messages rejected with HTTP 422.
   - Configurable CORS origin restriction.
 - **Three Intelligence Modes (Swift, Balanced, Deep)**:
-  - **Swift**: Fast latency responses powered by **Gemini 2.5 Flash** with **LOW** thinking level.
-  - **Balanced**: Everyday intelligence powered by **Gemini 2.5 Flash** with **MEDIUM** thinking level.
-  - **Deep**: Advanced reasoning and complex problem-solving powered by **Gemini 2.5 Pro** with **HIGH** thinking level.
+  - **Swift**: Fast latency responses powered by **Gemini 3.8 Flash** with **LOW** thinking level.
+  - **Balanced**: Everyday intelligence powered by **Gemini 3.8 Flash** with **MEDIUM** thinking level.
+  - **Deep**: Advanced reasoning and complex problem-solving powered by **Gemini 3.1 Pro** with **HIGH** thinking level.
   - Mode persistence in SQLite per conversation, seamless switching without memory fragmentation, and strict HTTP 422 rejection of unsupported modes.
 - **Full React Frontend Integration**: Modern React 19 + Vite UI with dark/light themes, real-time mode selector, conversation sidebar, markdown rendering, and backend health status banner.
 - **Automated Testing Suite**: 30 automated pytest tests mocking Gemini calls (zero API costs), plus a separate manual live integration test script.
@@ -71,7 +71,7 @@ flowchart TD
 | **API Framework** | FastAPI (0.115+) | High-performance ASGI framework with Pydantic v2 |
 | **Server** | Uvicorn (0.30+) | Lightning-fast ASGI web server |
 | **LLM SDK** | `google-genai` (1.0+) | Official Google Gen AI Python SDK |
-| **LLM Model** | Gemini 2.5 Flash | Default model (`gemini-2.5-flash`) |
+| **LLM Model** | Gemini 3.8 Flash / Gemini 3.1 Pro | Default flash model (`gemini-3.8-flash`), pro model (`gemini-3.1-pro-preview`) |
 | **ORM & Database** | SQLAlchemy 2.x & SQLite | Relational database with cascade foreign keys |
 | **Settings** | Pydantic Settings 2.x | Validated environment configuration |
 | **Testing** | pytest & pytest-asyncio | Asynchronous test framework |
@@ -167,7 +167,7 @@ Open `backend/.env` and insert your Gemini API key:
 ```env
 # Generate at https://aistudio.google.com/apikey
 GEMINI_API_KEY=your_actual_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.8-flash
 DATABASE_URL=sqlite:///./contextai.db
 APP_ENV=development
 FRONTEND_ORIGIN=http://localhost:5173
@@ -204,7 +204,7 @@ Returns backend health status, active LLM model, and environment.
   "status": "ok",
   "service": "contextai-api",
   "version": "0.1.0",
-  "model": "gemini-2.5-flash",
+  "model": "gemini-3.8-flash",
   "environment": "development"
 }
 ```

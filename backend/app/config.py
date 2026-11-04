@@ -23,9 +23,9 @@ def normalize_database_url(url: str) -> str:
 
 class Settings(BaseSettings):
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
-    gemini_flash_model: str = "gemini-2.5-flash"
-    gemini_pro_model: str = "gemini-2.5-pro"
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_flash_model: str = "gemini-3.8-flash"
+    gemini_pro_model: str = "gemini-3.1-pro-preview"
     database_url: str = ""
     database_url_unpooled: str = ""
     app_env: str = "development"

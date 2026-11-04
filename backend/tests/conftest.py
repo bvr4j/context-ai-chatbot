@@ -27,7 +27,7 @@ from app.main import app
 def test_settings() -> Settings:
     return Settings(
         gemini_api_key="test-api-key-12345",
-        gemini_model="gemini-2.5-flash",
+        gemini_model="gemini-3.8-flash",
         database_url="sqlite:///:memory:",
         app_env="testing",
         frontend_origin="http://localhost:5173",

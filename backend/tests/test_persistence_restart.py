@@ -20,7 +20,7 @@ async def test_backend_restart_persistence(tmp_path: Path):
 
     settings_instance = Settings(
         gemini_api_key="test-api-key",
-        gemini_model="gemini-2.5-flash",
+        gemini_model="gemini-3.8-flash",
         database_url=db_url,
         app_env="testing",
         frontend_origin="http://localhost:5173",

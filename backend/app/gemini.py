@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 MODE_CONFIG = {
     "swift": {
         "model_key": "gemini_flash_model",
-        "default_model": "gemini-2.5-flash",
+        "default_model": "gemini-3.8-flash",
         "thinking_level": types.ThinkingLevel.LOW,
         "thinking_name": "LOW",
         "max_output_tokens": 1024,
@@ -26,7 +26,7 @@ MODE_CONFIG = {
     },
     "balanced": {
         "model_key": "gemini_flash_model",
-        "default_model": "gemini-2.5-flash",
+        "default_model": "gemini-3.8-flash",
         "thinking_level": types.ThinkingLevel.MEDIUM,
         "thinking_name": "MEDIUM",
         "max_output_tokens": 2048,
@@ -34,7 +34,7 @@ MODE_CONFIG = {
     },
     "deep": {
         "model_key": "gemini_pro_model",
-        "default_model": "gemini-2.5-pro",
+        "default_model": "gemini-3.1-pro-preview",
         "thinking_level": types.ThinkingLevel.HIGH,
         "thinking_name": "HIGH",
         "max_output_tokens": 4096,
@@ -153,10 +153,10 @@ async def generate_reply(
 
     # Route to actual configured model
     if mode_clean == "deep":
-        model_id = getattr(settings, "gemini_pro_model", "gemini-2.5-pro")
+        model_id = getattr(settings, "gemini_pro_model", "gemini-3.1-pro-preview")
     else:
         model_id = getattr(
-            settings, "gemini_flash_model", getattr(settings, "gemini_model", "gemini-2.5-flash")
+            settings, "gemini_flash_model", getattr(settings, "gemini_model", "gemini-3.8-flash")
         )
 
     thinking_level = cfg["thinking_level"]
@@ -203,7 +203,7 @@ async def summarize_text(
     settings = get_settings()
     client = get_client()
     model_id = getattr(
-        settings, "gemini_flash_model", getattr(settings, "gemini_model", "gemini-2.5-flash")
+        settings, "gemini_flash_model", getattr(settings, "gemini_model", "gemini-3.8-flash")
     )
 
     transcript_lines = []

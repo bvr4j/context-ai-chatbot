@@ -28,6 +28,11 @@ from app.prompts import SYSTEM_INSTRUCTION
 
 
 def is_live_key_available() -> bool:
+    # Live tests make real external API calls and consume quota; run explicitly via:
+    # RUN_LIVE_GEMINI_TESTS=1 pytest backend/tests/test_gemini_live.py
+    # or: python backend/tests/test_gemini_live.py
+    if os.getenv("RUN_LIVE_GEMINI_TESTS", "").lower() not in ("1", "true", "yes"):
+        return False
     settings = get_settings()
     key = (settings.gemini_api_key or os.getenv("GEMINI_API_KEY", "")).strip()
     return bool(key and key not in ("replace_with_your_gemini_api_key", "your_gemini_api_key_here"))
@@ -47,8 +52,8 @@ async def test_live_gemini_reply():
         )
     ]
 
-    reply = await generate_reply(contents, SYSTEM_INSTRUCTION)
-    print(f"[LIVE TEST] Reply received:\n{reply}")
+    reply, mode, label = await generate_reply(contents, SYSTEM_INSTRUCTION)
+    print(f"[LIVE TEST] Reply received ({label}):\n{reply}")
     assert reply is not None
     assert len(reply.strip()) > 10
 
@@ -74,7 +79,9 @@ async def test_live_gemini_summarization():
 
 
 if __name__ == "__main__":
-    if not is_live_key_available():
+    settings = get_settings()
+    key = (settings.gemini_api_key or os.getenv("GEMINI_API_KEY", "")).strip()
+    if not key or key in ("replace_with_your_gemini_api_key", "your_gemini_api_key_here"):
         print("WARNING: GEMINI_API_KEY is not configured or contains placeholder text.")
         print("Set your key in backend/.env to run this live integration test.")
         sys.exit(0)
